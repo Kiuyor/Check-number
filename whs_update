@@ -1,0 +1,106 @@
+Check-number 更新日志
+=====================
+
+v9.0 (2026-05-31) — 模块化重构与代码质量
+------------------------------------------
+🎯 新功能
+  - 名单导入：右键菜单 → 导入名单，支持选择 .txt 文件替换当前名单
+  - 名单持久化：导入的名单加密存储，关闭应用后不重置
+  - 示例名单：随附 students_example.txt（40 个姓名）
+
+🧹 代码质量（31 项修复，P0~P3）
+  P0 安全/可靠性：
+  - 加密密钥优先从环境变量 CHECK_NUMBER_KEY 读取
+  - 文件 I/O 异常不再静默吞掉，损坏文件自动备份为 .corrupted
+  - 名单解密完全在内存中完成，不再写明文临时文件
+  - 名单加密使用原子写入（os.replace），防止写入中断损坏
+  - winsound 导入提升至模块级别，消除热路径重复 import
+
+  P1 架构/设计：
+  - FloatBall 提取至独立模块 float_ball.py
+  - Config 新增 set_color_scheme/set_sound_enabled/set_window_position 类方法
+  - JSON 读写从 4 个重复方法合并为通用 _read_json/_write_json
+  - 统计/历史对话框从 ~140 行重复代码提取为 _build_table_dialog 工厂
+  - xor_encrypt_decrypt 改为 @staticmethod
+  - showMinimized 重命名 minimize_to_float
+  - SplashScreen 淡出信号改为显式链式调用
+
+  P2 可维护性：
+  - 全代码库添加类型标注
+  - 统一使用 os.path.join 构建路径
+  - 新增 Config.get_font() 统一字体工厂
+  - UI 布局常量提取至 Config（MIN_BTN_POS、DIALOG_BTN_SIZE 等）
+  - 硬编码颜色统一通过 DesignTokens 路由
+  - _hex_to_rgb 增加输入校验
+  - sRGB→线性转换代码提取为 _srgb_to_linear 复用
+  - DesignTokens._COMMON → _DEFAULTS + 覆盖机制文档
+  - QSS 样式表从 140 行巨石拆分为 9 个组件方法
+
+  P3 代码清理：
+  - 移除未使用的 create_example_students/use_example_students
+  - 移除冗余 _shadows_deferred 标志
+  - SplashScreen 点动画帧提升为类常量
+  - 弃用 DPI 属性增加 Qt 版本守卫
+
+🖱️ 右键菜单重组
+  - 移除：最小化窗口、关闭窗口、设置子菜单（含音效/快速模式）
+  - "导入名单" → 顶级菜单项
+  - "重置统计" → "重置数据"
+  - "配色方案" → 顶级子菜单
+  - "快捷键说明" 移至关于软件前
+  - 新增：关闭程序
+
+🐛 修复
+  - FloatBall 移除 QGraphicsDropShadowEffect，修复 UpdateLayeredWindowIndirect 错误
+
+📦 模块结构（9 个文件）
+  v9.0.py            — 应用入口
+  config.py          — 配置、路径、偏好、QSS
+  design_tokens.py   — 6 套配色方案 Token
+  main_window.py     — 主窗口
+  float_ball.py      — 可拖拽悬浮球
+  splash_screen.py   — 启动画面
+  flash_animation.py — 名字闪动动画
+  sound_manager.py   — winsound 音效
+  students_example.txt — 示例名单
+
+
+v8.0 (2025) — PyQt5 完整重写
+------------------------------------------
+  - 从 tkinter 迁移至 PyQt5，单文件 ~577 行
+  - 无边框半透明窗口、启动画面、悬浮球最小化
+  - 逆频次加权概率算法
+  - QThread 动画线程 + QGraphicsOpacityEffect 淡入效果
+  - 统计数据管理 + HTML 表格弹窗
+  - XOR 名单加密
+
+
+v5.0.0 (2024) — tkinter 成熟版
+------------------------------------------
+  - 三种变体：基础版 / PPT 定制版 / PyQt5 实验版
+  - tkinter GUI 完善
+  - 基本数据统计与导出
+
+
+v4.5.0 (2024) — UI 优化
+------------------------------------------
+  - 界面美化
+  - 功能稳定
+
+
+v4.0.0 (2023) — 功能扩展
+------------------------------------------
+  - 新增统计分析
+  - 数据持久化
+
+
+v3.0.0 (2023) — 首个正式版
+------------------------------------------
+  - tkinter 基础 GUI
+  - 随机点名核心功能
+
+
+v2.0.0 (2023) — 原型
+------------------------------------------
+  - tkinter 简单窗口
+  - 基础随机抽取
