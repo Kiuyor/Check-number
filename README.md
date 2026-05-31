@@ -1,6 +1,6 @@
 # Check-number 🎲
 
-基于 PyQt5 的加权概率随机点名器。学生被抽取次数越少，被选中概率越高。支持名单加密、导入导出、悬浮球最小化、6 套配色方案、窗口透明度调节、字体切换。
+基于 PyQt5 的加权概率随机点名器。学生被抽取次数越少，被选中概率越高。支持名单加密、导入导出、悬浮球最小化、7 套配色方案、窗口透明度调节、字体切换。
 
 ## 版本
 
@@ -15,7 +15,7 @@
 
 ```bash
 pip install PyQt5
-python v8.0.py
+python v9.1.py
 ```
 
 ## 功能
@@ -60,7 +60,7 @@ python v8.0.py
 ## 项目结构
 
 ```
-├── v8.0.py              # 应用入口
+├── v9.1.py              # 应用入口
 ├── config.py            # 配置、路径、偏好、QSS 样式
 ├── design_tokens.py     # 7 套配色方案 Token
 ├── main_window.py       # 主窗口（UI + 事件 + 对话框）
@@ -106,7 +106,7 @@ python v8.0.py
 ```bash
 # Nuitka 编译
 pip install PyQt5 nuitka
-python -m nuitka --standalone --windows-console-mode=disable --output-dir=build --output-filename=CheckNumber.exe --include-data-files=whs_update=whs_update v8.0.py
+python -m nuitka --standalone --windows-console-mode=disable --output-dir=build --output-filename=CheckNumber.exe --include-data-files=whs_update=whs_update v9.1.py
 
 # NSIS 打包（需安装 NSIS，编辑 installer.nsi 确保路径正确）
 makensis installer.nsi
