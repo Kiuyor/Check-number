@@ -31,18 +31,18 @@ v9.1 (2026-05-31) — 功能增强与架构精炼
   P3 代码清理：
   - main_window.py 删除未使用的 import io / json / datetime / QFileDialog / QFont / QColor
   - sound_manager.py 音效频率/时长提取为类常量（NOTE_A4 / TICK_MS / NOTE_MS 等）
-  - v8.0.py 高 DPI 兼容块裸 except 窄化
+  - v9.1.py 高 DPI 兼容块裸 except 窄化
 
 📦 分发
-  - Nuitka standalone 编译：CheckNumber.exe (7.4 MB)，含 whs_update 数据文件
+  - Nuitka standalone 编译：CheckNumber.exe (7.2 MB)，含 whs_update 数据文件
   - NSIS 安装包：CheckNumber-Setup.exe (19.8 MB)，注册卸载程序 + 开始菜单/桌面快捷方式
-  - GitHub Release v9.0 发布，含完整中文更新日志
-  - 安装程序版本号从 v8.2 更新至 v9.0
+  - GitHub Release v9.1 发布，含完整中文更新日志
+  - 安装程序版本号更新至 v9.1
 
 📂 模块结构（12 个文件）
-  v8.0.py              — 应用入口
+  v9.1.py              — 应用入口
   config.py            — 配置、路径、偏好、QSS
-  design_tokens.py     — 6 套配色方案 Token
+  design_tokens.py     — 7 套配色方案 Token
   main_window.py       — 主窗口（UI + 事件 + 对话框）
   student_manager.py   — 名单管理
   stats_manager.py     — 统计管理
