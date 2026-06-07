@@ -12,6 +12,7 @@
   main_window.py    — 主窗口（UI + 业务逻辑）
 """
 import sys
+import os
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QFont
@@ -19,30 +20,29 @@ from config import Config
 from splash_screen import SplashScreen
 from main_window import RandomSelectorWindow
 
-# ===== 高 DPI 适配（必须在 QApplication 构造之前） =====
-# P3-5: AA_EnableHighDpiScaling / AA_UseHighDpiPixmaps 自 Qt 5.14 起弃用
-# 仅在旧版 Qt 上启用 (Qt < 5.14)
-try:
-    from PyQt5.QtCore import QT_VERSION_STR
-    _qt_major, _qt_minor, *_ = map(int, QT_VERSION_STR.split("."))
-    if (_qt_major, _qt_minor) < (5, 14):
-        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-except (ImportError, AttributeError, ValueError):
-    # 无法检测版本时保留原行为（保守策略）
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
-try:
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
-except AttributeError:
-    pass  # Qt < 5.14 无此 API
-# =======================================================
+def _setup_dpi():
+    """高 DPI 适配（必须在 QApplication 构造之前调用）
+
+    Windows 下 125%/150%/175% 缩放显示的核心适配。
+
+    机制说明：
+      1. Nuitka 编译时需加 --windows-dpi-awareness=per-monitor-v2
+         让 exe 向 Windows 声明"我能自己处理 DPI"，避免位图拉伸模糊
+      2. PassThrough 舍入策略支持 125%/150%/175% 等非整数倍缩放
+    """
+    os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+    try:
+        QApplication.setHighDpiScaleFactorRoundingPolicy(
+            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+        )
+    except AttributeError:
+        pass  # Qt < 5.14 无此 API
+
 
 def main():
     """应用入口 — Nuitka standalone 模式可编译此函数为原生代码"""
+    _setup_dpi()
     app = QApplication(sys.argv)
 
     # 全局字体

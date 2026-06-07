@@ -1,6 +1,7 @@
 """
 音效管理 — 基于 winsound.Beep + QTimer 非阻塞调度。
 """
+import sys
 from PyQt5.QtCore import QTimer
 
 # P0-6: 将 winsound 导入提升至模块级别，避免热路径中的重复 import 开销
@@ -32,8 +33,8 @@ class SoundManager:
         if _HAS_WINSOUND:
             try:
                 winsound.Beep(freq, duration_ms)
-            except (RuntimeError, OSError):
-                pass
+            except (RuntimeError, OSError) as e:
+                print(f"[Sound] 蜂鸣失败: {e}", file=sys.stderr)
 
     @staticmethod
     def play_flash_tick():

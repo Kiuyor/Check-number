@@ -29,78 +29,52 @@ class DesignTokens:
         "table_bronze": "#FFF7ED",
     }
 
-    # ── 各配色方案的基础色 ──
-    _BASE_SCHEMES = {
-        "indigo": {
-            "name": "靛蓝",
-            "primary": "#4F46E5", "primary_hover": "#4338CA", "primary_active": "#3730A3",
-            "gradient_top": "#5B52F0", "gradient_bottom": "#3B3CC4",
-            "surface_solid": "#4F46E5", "btn_min_bg": "#E0E7FF",
-            "table_header": "#F5F3FF", "table_border": "#E0E7FF",
-            "ball_bg": "#4F46E5", "ball_hover": "#4338CA",
-
-        },
-        "ocean": {
-            "name": "海蓝",
-            "primary": "#0EA5E9", "primary_hover": "#0284C7", "primary_active": "#0369A1",
-            "gradient_top": "#38BDF8", "gradient_bottom": "#0284C7",
-            "surface_solid": "#0EA5E9", "btn_min_bg": "#E0F2FE",
-            "table_header": "#F0F9FF", "table_border": "#BAE6FD",
-            "ball_bg": "#0EA5E9", "ball_hover": "#0284C7",
-
-        },
-        "emerald": {
-            "name": "翡翠绿",
-            "primary": "#10B981", "primary_hover": "#059669", "primary_active": "#047857",
-            "gradient_top": "#34D399", "gradient_bottom": "#059669",
-            "surface_solid": "#10B981", "btn_min_bg": "#D1FAE5",
-            "table_header": "#ECFDF5", "table_border": "#A7F3D0",
-            "ball_bg": "#10B981", "ball_hover": "#059669",
-
-        },
-        "sunset": {
-            "name": "日落橙",
-            "primary": "#F97316", "primary_hover": "#EA580C", "primary_active": "#C2410C",
-            "gradient_top": "#FB923C", "gradient_bottom": "#EA580C",
-            "surface_solid": "#F97316", "btn_min_bg": "#FFF7ED",
-            "table_header": "#FFF7ED", "table_border": "#FFEDD5",
-            "ball_bg": "#F97316", "ball_hover": "#EA580C",
-
-        },
-        "rose": {
-            "name": "玫瑰粉",
-            "primary": "#EC4899", "primary_hover": "#DB2777", "primary_active": "#BE185D",
-            "gradient_top": "#F472B6", "gradient_bottom": "#DB2777",
-            "surface_solid": "#EC4899", "btn_min_bg": "#FCE7F3",
-            "table_header": "#FDF2F8", "table_border": "#FBCFE8",
-            "ball_bg": "#EC4899", "ball_hover": "#DB2777",
-
-        },
-        "violet": {
-            "name": "紫罗兰",
-            "primary": "#8B5CF6", "primary_hover": "#7C3AED", "primary_active": "#6D28D9",
-            "gradient_top": "#A78BFA", "gradient_bottom": "#7C3AED",
-            "surface_solid": "#8B5CF6", "btn_min_bg": "#EDE9FE",
-            "table_header": "#F5F3FF", "table_border": "#DDD6FE",
-            "ball_bg": "#8B5CF6", "ball_hover": "#7C3AED",
-
-        },
-        "sky": {
-            "name": "晴空蓝",
-            "primary": "#2563EB", "primary_hover": "#1D4ED8", "primary_active": "#1E40AF",
-            "gradient_top": "#3B82F6", "gradient_bottom": "#1D4ED8",
-            "surface_solid": "#F0F9FF", "btn_min_bg": "#DBEAFE",
-            "table_header": "#F0F9FF", "table_border": "#BFDBFE",
-            "ball_bg": "#2563EB", "ball_hover": "#1D4ED8",
-
-            # 浅色主题覆盖项（覆盖 _DEFAULTS 中默认深色底的值）
-            "text_primary": "#0F172A",
-            "text_secondary": "#475569",
-            "border": "rgba(0, 0, 0, 0.08)",
-            "toast_bg": "rgba(15, 23, 42, 0.92)",
-            "result_gold": "#000000",
-        },
+    # 各方案的唯一数据（name, primary, primary_hover, primary_active,
+    #                  gradient_top, gradient_bottom, btn_min_bg, table_header, table_border）
+    # surface_solid / ball_bg / ball_hover 自动从 primary 派生
+    _SCHEME_DATA = {
+        "indigo":  ("靛蓝",   "#4F46E5", "#4338CA", "#3730A3", "#5B52F0", "#3B3CC4", "#E0E7FF", "#F5F3FF", "#E0E7FF"),
+        "ocean":   ("海蓝",   "#0EA5E9", "#0284C7", "#0369A1", "#38BDF8", "#0284C7", "#E0F2FE", "#F0F9FF", "#BAE6FD"),
+        "emerald": ("翡翠绿", "#10B981", "#059669", "#047857", "#34D399", "#059669", "#D1FAE5", "#ECFDF5", "#A7F3D0"),
+        "sunset":  ("日落橙", "#F97316", "#EA580C", "#C2410C", "#FB923C", "#EA580C", "#FFF7ED", "#FFF7ED", "#FFEDD5"),
+        "rose":    ("玫瑰粉", "#EC4899", "#DB2777", "#BE185D", "#F472B6", "#DB2777", "#FCE7F3", "#FDF2F8", "#FBCFE8"),
+        "violet":  ("紫罗兰", "#8B5CF6", "#7C3AED", "#6D28D9", "#A78BFA", "#7C3AED", "#EDE9FE", "#F5F3FF", "#DDD6FE"),
+        "sky":     ("晴空蓝", "#2563EB", "#1D4ED8", "#1E40AF", "#3B82F6", "#1D4ED8", "#DBEAFE", "#F0F9FF", "#BFDBFE"),
     }
+    _SCHEME_KEYS = ["name", "primary", "primary_hover", "primary_active",
+                    "gradient_top", "gradient_bottom", "btn_min_bg", "table_header", "table_border"]
+
+    # sky 浅色主题的覆盖项（覆盖 _DEFAULTS 中默认深色底的值）
+    _SKY_OVERRIDES = {
+        "surface_solid": "#F0F9FF",
+        "text_primary": "#0F172A",
+        "text_secondary": "#475569",
+        "border": "rgba(0, 0, 0, 0.08)",
+        "toast_bg": "rgba(15, 23, 42, 0.92)",
+        "result_gold": "#000000",
+    }
+
+    # ── 由 _SCHEME_DATA 构建的完整方案字典（惰性初始化） ──
+    _BASE_SCHEMES = None
+
+    @classmethod
+    def _ensure_schemes(cls):
+        """惰性构建 _BASE_SCHEMES：从 _SCHEME_DATA + 自动派生值 + _SKY_OVERRIDES 组装。
+        (P2-1: 数据驱动消除方案重复)
+        """
+        if cls._BASE_SCHEMES is not None:
+            return
+        cls._BASE_SCHEMES = {}
+        for key, vals in cls._SCHEME_DATA.items():
+            scheme = dict(zip(cls._SCHEME_KEYS, vals))
+            # 自动派生
+            scheme["surface_solid"] = scheme["primary"]
+            scheme["ball_bg"] = scheme["primary"]
+            scheme["ball_hover"] = scheme["primary_hover"]
+            # sky 特殊处理
+            if key == "sky":
+                scheme.update(cls._SKY_OVERRIDES)
+            cls._BASE_SCHEMES[key] = scheme
 
     # ═══════════════════════════════════════════════════════════════
     # 颜色工具
@@ -158,20 +132,24 @@ class DesignTokens:
     @classmethod
     def get(cls, scheme_key: str) -> dict:
         """获取指定配色方案的完整 Token 字典"""
+        cls._ensure_schemes()
         return cls._build_scheme(cls._BASE_SCHEMES[scheme_key])
 
     @classmethod
     def get_scheme_name(cls, key: str) -> str:
         """获取配色方案的中文名"""
+        cls._ensure_schemes()
         return cls._BASE_SCHEMES.get(key, {}).get("name", key)
 
     @classmethod
     def get_surface_rgb(cls, scheme_key: str) -> tuple:
         """提取 surface_solid 的 (r, g, b) 元组，用于动态 alpha 构造"""
+        cls._ensure_schemes()
         solid = cls._BASE_SCHEMES[scheme_key]["surface_solid"]
         return cls._hex_to_rgb(solid)
 
     @classmethod
     def list_schemes(cls) -> list:
         """列出所有配色方案 [(key, name), ...]"""
+        cls._ensure_schemes()
         return [(k, v["name"]) for k, v in cls._BASE_SCHEMES.items()]

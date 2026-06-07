@@ -21,8 +21,8 @@ VIAddVersionKey "LegalCopyright" "(c) 2023-2026 Soup_007"
 
 ; -------------------- Modern UI --------------------
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_ICON "app.ico"
+!define MUI_UNICON "app.ico"
 
 Var StartMenuFolder
 !define MUI_STARTMENUPAGE_DEFAULTFOLDER "CheckNumber"

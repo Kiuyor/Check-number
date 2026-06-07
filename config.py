@@ -56,12 +56,15 @@ class Config:
     _HISTORY_FILE = None
 
     # ── 偏好设置 ──
-    # 注意：这些类变量是全局可变状态。推荐通过 set_*() 类方法修改以自动触发保存。
+    # 注意：这些类变量是全局可变状态。不要直接赋值，应当使用 set_*() 类方法
+    # 以自动触发持久化保存。例外：load_preferences() 在启动时通过直接赋值初始化，
+    # 因为此时尚未（也不应）触发保存。
     color_scheme = "sky"
     window_x = None
     window_y = None
     sound_enabled = False
     window_opacity = 0.60  # 窗口卡片透明度 (0.25–1.00)
+    ball_opacity = 0.70    # 悬浮球透明度 (0.25–1.00)
     font_family = "HarmonyOS Sans"  # 显示字体
 
     # ═══════════════════════════════════════════════════════════════
@@ -108,6 +111,13 @@ class Config:
             cls.save_preferences()
 
     @classmethod
+    def set_ball_opacity(cls, value: float, save: bool = True):
+        """设置悬浮球透明度 (0.25–1.00)，save=False 时仅改内存不写磁盘"""
+        cls.ball_opacity = max(0.25, min(1.00, float(value)))
+        if save:
+            cls.save_preferences()
+
+    @classmethod
     def set_font_family(cls, family: str, save: bool = True):
         """设置显示字体，save=False 时仅改内存不写磁盘"""
         cls.font_family = family
@@ -126,6 +136,7 @@ class Config:
             Config.window_y = prefs.get("window_y")
             Config.sound_enabled = prefs.get("sound_enabled", False)
             Config.window_opacity = max(0.25, min(1.00, float(prefs.get("window_opacity", 0.60))))
+            Config.ball_opacity = max(0.25, min(1.00, float(prefs.get("ball_opacity", 0.70))))
             font_family = prefs.get("font_family", "HarmonyOS Sans")
             Config.font_family = font_family if font_family in Config.FONT_OPTIONS else "HarmonyOS Sans"
         except FileNotFoundError:
@@ -138,20 +149,17 @@ class Config:
 
     @staticmethod
     def save_preferences():
-        """保存偏好设置 (P0-2: 不再静默吞异常)"""
+        """保存偏好设置 (P0-2: 委托 write_json 使用原子写入)"""
         prefs = {
             "color_scheme": Config.color_scheme,
             "window_x": Config.window_x,
             "window_y": Config.window_y,
             "sound_enabled": Config.sound_enabled,
             "window_opacity": Config.window_opacity,
+            "ball_opacity": Config.ball_opacity,
             "font_family": Config.font_family,
         }
-        try:
-            with open(Config.get_config_file(), "w", encoding="utf-8") as f:
-                json.dump(prefs, f, ensure_ascii=False, indent=2)
-        except (PermissionError, OSError) as e:
-            print(f"[Config] 偏好保存失败: {e}", file=sys.stderr)
+        Config.write_json(Config.get_config_file(), prefs)
 
     # ═══════════════════════════════════════════════════════════════
     # 路径管理
@@ -174,10 +182,6 @@ class Config:
     @staticmethod
     def get_enc_file():
         return os.path.join(Config.get_base_dir(), "names.enc")
-
-    @staticmethod
-    def get_temp_file():
-        return os.path.join(Config.get_base_dir(), "names_temp.txt")
 
     @staticmethod
     def get_stats_file():
@@ -205,6 +209,48 @@ class Config:
         return Config._HISTORY_FILE
 
     # ═══════════════════════════════════════════════════════════════
+    # 共享 JSON 工具 (P1-1: 消除 stats_manager / history_manager 的重复)
+    # ═══════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def read_json(file_path: str, default):
+        """读取 JSON 文件，带错误分类处理。default 是文件不存在时的返回值。"""
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return default
+        except json.JSONDecodeError as e:
+            print(f"[Config] JSON 文件损坏 ({file_path}): {e}", file=sys.stderr)
+            try:
+                os.rename(file_path, file_path + ".corrupted")
+            except OSError:
+                pass
+            return default
+        except (PermissionError, OSError) as e:
+            print(f"[Config] 文件读取失败 ({file_path}): {e}", file=sys.stderr)
+            return default
+
+    @staticmethod
+    def write_json(file_path: str, data) -> bool:
+        """写入 JSON 文件（tmp+replace 原子模式），成功返回 True，失败返回 False。"""
+        try:
+            tmp_path = file_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, file_path)
+            return True
+        except (PermissionError, OSError) as e:
+            print(f"[Config] 文件写入失败 ({file_path}): {e}", file=sys.stderr)
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            return False
+
+    # ═══════════════════════════════════════════════════════════════
     # QSS 样式生成 (P1-6: 拆分为可组合的小方法)
     # ═══════════════════════════════════════════════════════════════
 
@@ -215,7 +261,6 @@ class Config:
         parts = [
             Config._global_qss(),
             Config._button_qss(t),
-            Config._float_ball_qss(),
             Config._mac_button_qss(),
             Config._toast_qss(t),
             Config._menu_qss(t),
@@ -258,20 +303,6 @@ class Config:
             background: {t['primary_hover']};
             color: rgba(255,255,255,0.5);
         }}
-        """
-
-    @staticmethod
-    def _float_ball_qss():
-        return """
-        /* ── 悬浮球 ── */
-        QPushButton#floatBtn {
-            background-color: #8E9CA8;
-            border: none;
-            border-radius: 20px;
-        }
-        QPushButton#floatBtn:hover {
-            background-color: #A0B0BC;
-        }
         """
 
     @staticmethod

@@ -1,9 +1,6 @@
 """
 统计管理器 — 负责抽取统计数据的 CRUD、概率计算、导出。
 """
-import json
-import os
-import sys
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
 from config import Config
 
@@ -15,45 +12,13 @@ class StatisticsManager:
         self.stats: dict = {}
         self._probabilities_cache: dict | None = None
 
-    # ── JSON 工具 ──
-
-    @staticmethod
-    def _read_json(file_path: str, default=None):
-        if default is None:
-            default = {}
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except FileNotFoundError:
-            return default
-        except json.JSONDecodeError as e:
-            print(f"[Stats] JSON 文件损坏 ({file_path}): {e}", file=sys.stderr)
-            try:
-                os.rename(file_path, file_path + ".corrupted")
-            except OSError:
-                pass
-            return default
-        except (PermissionError, OSError) as e:
-            print(f"[Stats] 文件读取失败 ({file_path}): {e}", file=sys.stderr)
-            return default
-
-    @staticmethod
-    def _write_json(file_path: str, data) -> bool:
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            return True
-        except (PermissionError, OSError) as e:
-            print(f"[Stats] 文件写入失败 ({file_path}): {e}", file=sys.stderr)
-            return False
-
     # ── 持久化 ──
 
     def load_from_json(self):
-        self.stats = self._read_json(Config.get_stats_file(), {})
+        self.stats = Config.read_json(Config.get_stats_file(), {})
 
     def save_to_json(self):
-        self._write_json(Config.get_stats_file(), self.stats)
+        Config.write_json(Config.get_stats_file(), self.stats)
 
     # ── 概率计算 ──
 
@@ -84,9 +49,16 @@ class StatisticsManager:
         for s in stat_keys - student_set:
             del self.stats[s]
         if student_set != stat_keys:
+            self.invalidate_cache()  # P0-1: 键集变更后必须失效概率缓存
             self.save_to_json()
 
     # ── 用户操作 ──
+
+    def increment(self, name: str):
+        """增加某一学生的抽取次数，自动保存并失效概率缓存 (P1-1)"""
+        self.stats[name] = self.stats.get(name, 0) + 1
+        self.save_to_json()
+        self.invalidate_cache()
 
     def reset(self, parent=None) -> bool:
         """确认后重置统计数据。返回是否已重置。"""
@@ -108,6 +80,5 @@ class StatisticsManager:
             parent, "导出统计数据", "statistics.json", "JSON Files (*.json)"
         )
         if path:
-            if self._write_json(path, self.stats):
-                return True
+            return Config.write_json(path, self.stats)
         return False

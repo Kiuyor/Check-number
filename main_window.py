@@ -12,9 +12,9 @@ from PyQt5.QtWidgets import (
     QShortcut, QAbstractItemView, QSlider, QTextEdit,
 )
 from PyQt5.QtCore import (
-    QTimer, QPropertyAnimation, Qt, QEasingCurve, QPoint,
+    QTimer, QPropertyAnimation, Qt, QEasingCurve,
 )
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtGui import QColor, QKeySequence
 from design_tokens import DesignTokens
 from config import Config
 from student_manager import StudentManager
@@ -22,7 +22,7 @@ from stats_manager import StatisticsManager
 from history_manager import HistoryManager
 from flash_animation import FlashAnimation
 from sound_manager import SoundManager
-from float_ball import FloatBall  # P1-8
+from float_ball import FloatBall
 
 
 class RandomSelectorWindow(QMainWindow):
@@ -44,7 +44,6 @@ class RandomSelectorWindow(QMainWindow):
         self._result_animation = None  # 保持引用防止被 GC
 
         # ── 功能状态 ──
-        self.sound_enabled = Config.sound_enabled
         self.fast_mode_enabled = False
 
         # ── 初始化 ──
@@ -61,14 +60,18 @@ class RandomSelectorWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════════════
 
     def _deferred_init(self):
-        """窗口显示后加载数据"""
-        self.stats_mgr.load_from_json()
-        self.history_mgr.load_from_json()
-        students, messages = self.student_mgr.prepare_students_file()
-        self.students = students
-        self.stats_mgr.ensure_initialized(self.students)
-        for msg in messages:
-            self.show_toast(msg)
+        """窗口显示后加载数据 (P1-6: 防止 I/O 异常导致空名单)"""
+        try:
+            self.stats_mgr.load_from_json()
+            self.history_mgr.load_from_json()
+            students, messages = self.student_mgr.prepare_students_file()
+            self.students = students
+            self.stats_mgr.ensure_initialized(self.students)
+            for msg in messages:
+                self.show_toast(msg)
+        except Exception as e:
+            print(f"[MainWindow] 数据加载失败: {e}", file=sys.stderr)
+            self.show_toast(f"数据加载失败: {e}")
 
     # ═══════════════════════════════════════════════════════════════
     # 主题管理
@@ -122,13 +125,21 @@ class RandomSelectorWindow(QMainWindow):
         self.status_label.setFont(Config.get_font(11))
         # 悬浮球使用 QSS，不受 qApp 字体影响，无需刷新
 
-    def _show_opacity_dialog(self):
-        """滑块弹窗 — 实时预览窗口透明度调节"""
+    def _build_opacity_dialog(self, title, getter, setter, apply_style, toast_label):
+        """通用透明度滑块弹窗工厂 (P1-2: 消除两个 ~95 行弹窗的重复)
+
+        Args:
+            title: 对话框标题
+            getter: 获取当前值 (→ float)
+            setter: 设置值 (value, save)
+            apply_style: 实时刷新样式的回调
+            toast_label: Toast 消息前缀（如 "透明度" / "小球透明度"）
+        """
         t = DesignTokens.get(Config.color_scheme)
-        previous = Config.window_opacity
+        previous = getter()
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("自定义透明度")
+        dlg.setWindowTitle(title)
         dlg.setFixedSize(320, 140)
         dlg.setStyleSheet(f"QDialog {{ background: {t['surface_solid']}; border-radius: 12px; }}")
 
@@ -136,15 +147,13 @@ class RandomSelectorWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        # 百分比标签
         pct_label = QLabel(f"{int(previous * 100)}%")
-        pct_label.setAlignment(Qt.AlignCenter)
+        pct_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         pct_label.setFont(Config.get_font(18, bold=True))
         pct_label.setStyleSheet(f"color: {t['on_primary']}; background: transparent;")
         layout.addWidget(pct_label)
 
-        # 滑块：25–100 → 0.25–1.00
-        slider = QSlider(Qt.Horizontal)
+        slider = QSlider(Qt.Orientation.Horizontal)
         slider.setRange(25, 100)
         slider.setValue(int(previous * 100))
         slider.setTickPosition(QSlider.TicksBelow)
@@ -169,15 +178,13 @@ class RandomSelectorWindow(QMainWindow):
         """)
         layout.addWidget(slider)
 
-        # 实时预览（不写磁盘，仅内存）
         def _on_slider_change(val):
             pct_label.setText(f"{val}%")
-            Config.set_window_opacity(val / 100.0, save=False)
-            self._update_shadow_style()
+            setter(val / 100.0, save=False)
+            apply_style()
 
         slider.valueChanged.connect(_on_slider_change)
 
-        # 按钮
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
         bw, bh = Config.DIALOG_BTN_SIZE
@@ -205,7 +212,6 @@ class RandomSelectorWindow(QMainWindow):
         btn_layout.addWidget(ok_btn)
         layout.addLayout(btn_layout)
 
-        # 居中于主窗口
         dlg.move(self.x() + (self.width() - 320) // 2,
                  self.y() + (self.height() - 140) // 2)
 
@@ -213,13 +219,40 @@ class RandomSelectorWindow(QMainWindow):
 
         if result == QDialog.Accepted:
             final_value = slider.value() / 100.0
-            Config.set_window_opacity(final_value)
-            self._update_shadow_style()
-            self.show_toast(f"透明度：{slider.value()}%")
+            setter(final_value)
+            apply_style()
+            self.show_toast(f"{toast_label}：{slider.value()}%")
         else:
-            # 恢复原值（不写磁盘）
-            Config.set_window_opacity(previous, save=False)
-            self._update_shadow_style()
+            setter(previous, save=False)
+            apply_style()
+
+    def _apply_ball_opacity(self, value: float):
+        """应用悬浮球透明度，持久化并刷新样式"""
+        Config.set_ball_opacity(value)
+        if hasattr(self, 'float_window') and self.float_window is not None:
+            self.float_window.refresh_theme()
+        pct = int(value * 100)
+        self.show_toast(f"小球透明度：{pct}%")
+
+    def _show_opacity_dialog(self):
+        """窗口透明度滑块弹窗"""
+        self._build_opacity_dialog(
+            "自定义透明度",
+            lambda: Config.window_opacity,
+            Config.set_window_opacity,
+            self._update_shadow_style,
+            "透明度",
+        )
+
+    def _show_ball_opacity_dialog(self):
+        """悬浮球透明度滑块弹窗"""
+        self._build_opacity_dialog(
+            "自定义小球透明度",
+            lambda: Config.ball_opacity,
+            Config.set_ball_opacity,
+            lambda: self.float_window.refresh_theme() if self.float_window else None,
+            "小球透明度",
+        )
 
     def _cycle_color_scheme(self):
         """循环切换配色方案"""
@@ -368,7 +401,7 @@ class RandomSelectorWindow(QMainWindow):
         """开始抽取"""
         if self._flash is not None:
             return
-        if self.sound_enabled:
+        if Config.sound_enabled:
             SoundManager.play_start()
         if self.fast_mode_enabled:
             self.perform_draw()
@@ -378,7 +411,7 @@ class RandomSelectorWindow(QMainWindow):
                 self.students,
                 on_name=self.result_label.setText,
                 on_finish=self.perform_draw,
-                on_tick=(lambda: SoundManager.play_flash_tick()) if self.sound_enabled else None,
+                on_tick=(lambda: SoundManager.play_flash_tick()) if Config.sound_enabled else None,
             )
             self._flash.start()
 
@@ -388,12 +421,10 @@ class RandomSelectorWindow(QMainWindow):
         student_list, weights = zip(*probabilities.items())
         student_list, weights = list(student_list), list(weights)
         selected = random.choices(student_list, weights=weights, k=1)[0]
-        self.stats_mgr.stats[selected] = self.stats_mgr.stats.get(selected, 0) + 1
+        self.stats_mgr.increment(selected)
         self.history_mgr.add_record([selected])
-        self.stats_mgr.save_to_json()
-        self.stats_mgr.invalidate_cache()
 
-        if self.sound_enabled:
+        if Config.sound_enabled:
             SoundManager.play_result()
 
         self.animate_result(selected)
@@ -436,6 +467,26 @@ class RandomSelectorWindow(QMainWindow):
     # 右键菜单
     # ═══════════════════════════════════════════════════════════════
 
+    def _build_checkable_menu(self, title: str, items: list, current_value, tag: str) -> QMenu:
+        """构建可复选的子菜单（P1-5: 消除 contextMenuEvent 中子菜单重复构建）
+
+        Args:
+            title: 菜单标题
+            items: [(label, value), ...]
+            current_value: 当前选中值
+            tag: action.data() 中存储的标签（如 "scheme", "window_opacity"）
+        """
+        menu = QMenu(title, self)
+        for label, val in items:
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            if isinstance(current_value, float):
+                action.setChecked(abs(current_value - val) < 0.01)
+            else:
+                action.setChecked(current_value == val)
+            action.setData((tag, val))
+        return menu
+
     def contextMenuEvent(self, event):
         menu = QMenu(self)
 
@@ -454,40 +505,32 @@ class RandomSelectorWindow(QMainWindow):
         menu.addMenu(stats_menu)
 
         # ── 配色方案 ──
-        color_menu = QMenu("配色方案", self)
-        for key, name in DesignTokens.list_schemes():
-            action = color_menu.addAction(name)
-            action.setCheckable(True)
-            action.setChecked(key == Config.color_scheme)
-            action.setData(key)
-        menu.addMenu(color_menu)
+        scheme_items = [(name, key) for key, name in DesignTokens.list_schemes()]
+        menu.addMenu(self._build_checkable_menu("配色方案", scheme_items, Config.color_scheme, "scheme"))
 
         # ── 窗口透明度 ──
-        opacity_menu = QMenu("窗口透明度", self)
-        presets = [
-            ("极透明", 0.30),
-            ("高透明", 0.45),
-            ("默认", 0.60),
-            ("低透明", 0.75),
-            ("微透明", 0.90),
+        opacity_presets = [
+            ("极透明", 0.30), ("高透明", 0.45), ("默认", 0.60),
+            ("低透明", 0.75), ("微透明", 0.90),
         ]
-        for name, val in presets:
-            action = opacity_menu.addAction(name)
-            action.setCheckable(True)
-            action.setChecked(abs(Config.window_opacity - val) < 0.01)
-            action.setData(val)
+        opacity_menu = self._build_checkable_menu("窗口透明度", opacity_presets, Config.window_opacity, "window_opacity")
         opacity_menu.addSeparator()
         opacity_menu.addAction("自定义...", self._show_opacity_dialog)
         menu.addMenu(opacity_menu)
 
         # ── 显示字体 ──
-        font_menu = QMenu("显示字体", self)
-        for family in Config.FONT_OPTIONS:
-            action = font_menu.addAction(family)
-            action.setCheckable(True)
-            action.setChecked(family == Config.font_family)
-            action.setData(family)
-        menu.addMenu(font_menu)
+        font_items = [(f, f) for f in Config.FONT_OPTIONS]
+        menu.addMenu(self._build_checkable_menu("显示字体", font_items, Config.font_family, "font"))
+
+        # ── 小球透明度 ──
+        ball_presets = [
+            ("微透明", 0.30), ("高透明", 0.50), ("默认", 0.70),
+            ("低透明", 0.85), ("实心", 1.00),
+        ]
+        ball_menu = self._build_checkable_menu("小球透明度", ball_presets, Config.ball_opacity, "ball_opacity")
+        ball_menu.addSeparator()
+        ball_menu.addAction("自定义...", self._show_ball_opacity_dialog)
+        menu.addMenu(ball_menu)
 
         menu.addSeparator()
 
@@ -501,14 +544,16 @@ class RandomSelectorWindow(QMainWindow):
         if not action:
             return
         data = action.data()
-        if data is not None:
-            if isinstance(data, float):
-                self._apply_window_opacity(data)
-            elif isinstance(data, str):
-                if data in Config.FONT_OPTIONS:
-                    self._apply_font_family(data)
-                else:
-                    self._apply_color_scheme(data)
+        if data is not None and isinstance(data, tuple):
+            tag, value = data
+            if tag == "scheme":
+                self._apply_color_scheme(value)
+            elif tag == "window_opacity":
+                self._apply_window_opacity(value)
+            elif tag == "font":
+                self._apply_font_family(value)
+            elif tag == "ball_opacity":
+                self._apply_ball_opacity(value)
 
     # ── 管理器适配方法（P1-11: 委托给管理器 + Toast 反馈） ──
 
@@ -520,7 +565,7 @@ class RandomSelectorWindow(QMainWindow):
                 self.show_toast(message)
             return
         if reset_stats:
-            self.stats_mgr.reset()
+            self.stats_mgr.reset(self)
             self.stats_mgr.ensure_initialized(students)
         self.students = students
         self.show_toast(message)
@@ -781,15 +826,7 @@ class RandomSelectorWindow(QMainWindow):
 
         dlg.exec_()
 
-    # ═══════════════════════════════════════════════════════════════
-    # 音效
-    # ═══════════════════════════════════════════════════════════════
 
-    def _toggle_sound(self, enabled: bool):
-        """切换音效 (P1-2: 使用 Config.set_sound_enabled)"""
-        self.sound_enabled = enabled
-        Config.set_sound_enabled(enabled)
-        self.show_toast("音效已开启" if enabled else "音效已关闭")
 
     # ═══════════════════════════════════════════════════════════════
     # 快速模式

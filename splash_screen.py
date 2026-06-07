@@ -3,7 +3,6 @@
 """
 from PyQt5.QtWidgets import QApplication, QWidget, QFrame, QLabel, QGraphicsOpacityEffect
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
-from PyQt5.QtGui import QFont
 from design_tokens import DesignTokens
 from config import Config
 
@@ -13,18 +12,23 @@ class SplashScreen(QWidget):
 
     # P3-2: 将点动画帧提升为类级常量，避免每 400ms 重新分配列表
     _DOT_FRAMES = ["· · ·", "• · ·", "· • ·", "· · •"]
+    _WINDOW_SIZE = (240, 140)
+    _TITLE_Y = 28
+    _SUBTITLE_Y = 70
+    _DOTS_Y = 100
 
     def __init__(self, scheme_key: str = "indigo"):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(240, 140)
+        w, h = self._WINDOW_SIZE
+        self.setFixedSize(w, h)
 
         t = DesignTokens.get(scheme_key)
 
         # 背景圆角卡片
         self._bg = QFrame(self)
-        self._bg.setGeometry(0, 0, 240, 140)
+        self._bg.setGeometry(0, 0, *self._WINDOW_SIZE)
         self._bg.setStyleSheet(f"""
             QFrame {{
                 background-color: {t['surface_solid']};
@@ -38,21 +42,21 @@ class SplashScreen(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setFont(Config.get_font(22, bold=True))
         title.setStyleSheet(f"color: {t['splash_title_fg']}; background: transparent;")
-        title.setGeometry(0, 28, 240, 40)
+        title.setGeometry(0, self._TITLE_Y, w, 40)
 
         # 副标题
         subtitle = QLabel("随机点名器", self._bg)
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setFont(Config.get_font(12))
         subtitle.setStyleSheet(f"color: {t['splash_subtitle_fg']}; background: transparent;")
-        subtitle.setGeometry(0, 70, 240, 24)
+        subtitle.setGeometry(0, self._SUBTITLE_Y, w, 24)
 
         # 进度指示器（三个点）
         self._dots = QLabel("· · ·", self._bg)
         self._dots.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._dots.setFont(Config.get_font(16))
         self._dots.setStyleSheet(f"color: {t['splash_dots_fg']}; background: transparent;")
-        self._dots.setGeometry(0, 100, 240, 24)
+        self._dots.setGeometry(0, self._DOTS_Y, w, 24)
         self._dot_timer = QTimer()
         self._dot_frame = 0
         self._dot_timer.timeout.connect(self._animate_dots)
@@ -75,7 +79,8 @@ class SplashScreen(QWidget):
         screen = QApplication.primaryScreen()
         if screen:
             geo = screen.geometry()
-            self.move((geo.width() - 240) // 2, (geo.height() - 140) // 2)
+            w, h = self._WINDOW_SIZE
+            self.move((geo.width() - w) // 2, (geo.height() - h) // 2)
 
     def _animate_dots(self):
         self._dot_frame = (self._dot_frame + 1) % len(self._DOT_FRAMES)
