@@ -1,0 +1,44 @@
+{
+  "skill_name": "release-publisher",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "发布 v9.4 修复了统计窗口排序 bug，还有多人抽取的连续不重复保护在某些边界条件下失效的问题",
+      "expected_output": "完整的 v9.4 发布流程：whs_update 追加新版本块→update_release.py 更新版本号→测试→Git 提交+打标签+推送→构建→Release 指引",
+      "files": [],
+      "expectations": [
+        "whs_update 文件顶部新增了 v9.4 版本块",
+        "installer.nsi 中的 VIProductVersion 改为 9.4.0.0",
+        "installer.nsi 中的 DisplayVersion 改为 9.4",
+        "installer.nsi 中的 DisplayName 改为 CheckNumber v9.4",
+        "运行了 python tests/test_core.py",
+        "执行了 git add + git commit -m 'v9.4: ...' + git tag v9.4 + git push",
+        "执行了 .\\build.ps1 -Clean",
+        "输出了 GitHub Release 创建指引（含链接和上传步骤）"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "打 v10.0 版本，新功能是分组抽取和深色主题切换",
+      "expected_output": "完整的 v10.0 发布流程：whs_update + update_release.py → 测试 → Git → 构建 → Release 指引",
+      "files": [],
+      "expectations": [
+        "whs_update 文件顶部新增了 v10.0 版本块",
+        "installer.nsi 的 VIProductVersion 改为 10.0.0.0",
+        "执行了 git tag v10.0",
+        "输出了 GitHub Release 指引"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "发布 v9.4",
+      "expected_output": "skill 询问用户版本名称和日志分类内容后再继续",
+      "files": [],
+      "expectations": [
+        "skill 在更新 whs_update 之前询问了版本名称",
+        "skill 在追加日志内容之前询问了具体改动分类",
+        "skill 没有编造日志内容"
+      ]
+    }
+  ]
+}

@@ -520,6 +520,8 @@ class RandomSelectorWindow(QMainWindow):
             if self._last_drawn is not None and self._last_drawn in working and len(working) > 1:
                 working = [s for s in working if s != self._last_drawn]
 
+            # P0-1: 每轮失效缓存，否则概率缓存用旧 working 列表数据导致抽到已移除学生
+            self.stats_mgr.invalidate_cache()
             probabilities = self.stats_mgr.calculate_probabilities(working)
             name_list, weight_list = zip(*probabilities.items())
             name_list, weight_list = list(name_list), list(weight_list)
