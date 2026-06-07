@@ -13,7 +13,7 @@ OutFile "CheckNumber-Setup.exe"
 InstallDir "$PROGRAMFILES\CheckNumber"
 RequestExecutionLevel admin
 
-VIProductVersion "9.2.0.0"
+VIProductVersion "9.3.0.0"
 VIAddVersionKey "ProductName" "CheckNumber"
 VIAddVersionKey "CompanyName" "Soup_007"
 VIAddVersionKey "FileDescription" "Random Name Picker Setup"
@@ -48,11 +48,11 @@ Section "Install"
 
     ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
     IntFmt $0 "0x%08X" $0
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayName" "CheckNumber v9.2"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayName" "CheckNumber v9.3"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "UninstallString" '"$INSTDIR\uninstall.exe"'
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayIcon" '"$INSTDIR\CheckNumber.exe"'
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "Publisher" "Soup_007"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayVersion" "9.2"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayVersion" "9.3"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "EstimatedSize" "$0"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "NoRepair" 1

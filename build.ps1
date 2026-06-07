@@ -13,8 +13,8 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
 # ---- Paths ----
-$NuitkaOutput    = "build\v9.2.dist"
-$NuitkaBuild     = "build\v9.2.build"
+$NuitkaOutput    = "build\v9.3.dist"
+$NuitkaBuild     = "build\v9.3.build"
 $ExePath         = "$NuitkaOutput\CheckNumber.exe"
 $NSIS            = "C:\Program Files (x86)\NSIS\makensis.exe"
 $ManifestTool    = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\mt.exe"

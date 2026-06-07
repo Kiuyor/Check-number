@@ -202,6 +202,125 @@ def test_save_and_load_json():
         os.unlink(tmp_path)
 
 
+# ═══════════════════════════════════════════════════════════════
+# StatisticsManager — 三层公平性保护 (v9.3)
+# ═══════════════════════════════════════════════════════════════
+
+def test_mean_filter_triggers_on_large_gap():
+    """当 max-min > GAP_THRESHOLD 时，count > 平均值的学生应被排除（概率为 0）"""
+    mgr = StatisticsManager()
+    students = ["A", "B", "C", "D", "E", "F"]
+    # gap = 10 - 0 = 10 > GAP_THRESHOLD(3)
+    mgr.stats = {"A": 10, "B": 10, "C": 0, "D": 0, "E": 0, "F": 0}
+    probs = mgr.calculate_probabilities(students)
+    # 平均值 = 20/6 ≈ 3.33，只有 count≤3.33 的进候选池 → C,D,E,F (都=0)
+    assert abs(probs["A"]) < 0.001, f"A 概率应为 0（被过滤），实际: {probs['A']}"
+    assert abs(probs["B"]) < 0.001, f"B 概率应为 0（被过滤），实际: {probs['B']}"
+    assert probs["C"] > 0, "C 应在候选池"
+    assert abs(sum(probs.values()) - 1.0) < 0.001, "概率和应为 1"
+
+
+def test_candidate_pool_minimum():
+    """候选池不得低于 N×CANDIDATE_POOL_MIN_RATIO"""
+    mgr = StatisticsManager()
+    students = ["A", "B", "C", "D", "E"]
+    # gap = 10 - 0 = 10 > 3，mean = 20/5 = 4
+    # count≤4 的: C,D,E → pool=3
+    # min_pool = max(2, 5*0.30) = max(2, 1) = 2
+    # 3 >= 2，无需补回
+    mgr.stats = {"A": 10, "B": 10, "C": 0, "D": 0, "E": 0}
+    probs = mgr.calculate_probabilities(students)
+    assert abs(probs["A"]) < 0.001
+    assert abs(probs["B"]) < 0.001
+    # C、D、E 各有非零概率
+    assert probs["C"] > 0
+    assert probs["D"] > 0
+    assert probs["E"] > 0
+
+    # 极端情况：只有1人count≤mean，需要补回
+    mgr2 = StatisticsManager()
+    students2 = ["X", "Y", "Z", "W"]
+    # gap=10, mean=20/4=5, count≤5: Y(0) → pool=1
+    # min_pool = max(2, 4*0.30) = max(2, 1) = 2, 需要从排除列表中补回 count 最小的
+    # excluded = [W(5), Z(5), X(10)], 补回 W
+    mgr2.stats = {"X": 10, "Y": 0, "Z": 5, "W": 5}
+    probs2 = mgr2.calculate_probabilities(students2)
+    nonzero_count = sum(1 for p in probs2.values() if p > 0.001)
+    assert nonzero_count >= 2, f"候选池应至少 2 人，实际非零人数: {nonzero_count}"
+    assert abs(probs2["X"]) < 0.001, "X (count=10) 应被排除"
+    assert probs2["Y"] > 0, "Y (count=0) 应在候选池"
+    assert abs(sum(probs2.values()) - 1.0) < 0.001
+
+
+def test_no_filter_when_gap_small():
+    """差距 ≤ GAP_THRESHOLD 时，所有学生都在候选池"""
+    mgr = StatisticsManager()
+    students = ["甲", "乙", "丙"]
+    # gap = 3 - 0 = 3 ≤ 3，不触发过滤
+    mgr.stats = {"甲": 3, "乙": 1, "丙": 0}
+    probs = mgr.calculate_probabilities(students)
+    for s in students:
+        assert probs[s] > 0, f"{s} 概率应为正: {probs[s]}"
+    assert abs(sum(probs.values()) - 1.0) < 0.001
+
+
+def test_get_probability():
+    """get_probability 应返回单个学生的概率值"""
+    mgr = StatisticsManager()
+    students = ["张三", "李四", "王五"]
+    mgr.stats = {"张三": 3, "李四": 1, "王五": 0}
+    prob_zhang = mgr.get_probability("张三", students)
+    prob_li = mgr.get_probability("李四", students)
+    prob_wang = mgr.get_probability("王五", students)
+    assert 0.0 <= prob_zhang <= 1.0
+    assert 0.0 <= prob_li <= 1.0
+    assert 0.0 <= prob_wang <= 1.0
+    assert prob_wang > prob_li > prob_zhang, "被抽中越多概率越低"
+
+
+def test_increment_and_update_cache():
+    """increment_and_update_cache 应更新计数并预热缓存"""
+    mgr = StatisticsManager()
+    students = ["A", "B", "C"]
+    mgr.stats = {"A": 2, "B": 1, "C": 0}
+    mgr.increment_and_update_cache("A", students)
+    assert mgr.stats["A"] == 3
+    # 缓存应已预热
+    assert mgr._probabilities_cache is not None
+    probs = mgr.calculate_probabilities(students)
+    assert abs(sum(probs.values()) - 1.0) < 0.001
+
+
+def test_increment_batch_and_update_cache():
+    """increment_batch_and_update_cache 应批量更新并预热缓存"""
+    mgr = StatisticsManager()
+    students = ["A", "B", "C", "D"]
+    mgr.stats = {"A": 1, "B": 1, "C": 0, "D": 0}
+    mgr.increment_batch_and_update_cache(["A", "B", "C"], students)
+    assert mgr.stats["A"] == 2
+    assert mgr.stats["B"] == 2
+    assert mgr.stats["C"] == 1
+    assert mgr.stats["D"] == 0
+    assert mgr._probabilities_cache is not None
+    probs = mgr.calculate_probabilities(students)
+    assert abs(sum(probs.values()) - 1.0) < 0.001
+
+
+def test_probabilities_empty_students():
+    """空名单应返回空字典"""
+    mgr = StatisticsManager()
+    probs = mgr.calculate_probabilities([])
+    assert probs == {}
+
+
+def test_probabilities_single_student():
+    """单人名单概率应为 1.0"""
+    mgr = StatisticsManager()
+    students = ["唯一"]
+    probs = mgr.calculate_probabilities(students)
+    assert abs(probs["唯一"] - 1.0) < 0.001
+
+
 if __name__ == "__main__":
     # 简易运行：pytest 或直接 python tests/
     test_xor_encrypt_decrypt()
@@ -217,4 +336,13 @@ if __name__ == "__main__":
     test_ensure_initialized_adds_new_students()
     test_ensure_initialized_removes_orphans()
     test_save_and_load_json()
+    # v9.3 新增
+    test_mean_filter_triggers_on_large_gap()
+    test_candidate_pool_minimum()
+    test_no_filter_when_gap_small()
+    test_get_probability()
+    test_increment_and_update_cache()
+    test_increment_batch_and_update_cache()
+    test_probabilities_empty_students()
+    test_probabilities_single_student()
     print("所有测试通过 [OK]")

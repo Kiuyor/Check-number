@@ -24,7 +24,10 @@ class Config:
     TOAST_FADE_DURATION = 300
 
     # ── 窗口 ──
-    WINDOW_SIZE = (280, 140)
+    WINDOW_SIZE = (280, 140)        # 默认（单人）窗口尺寸
+    WINDOW_MAX_WIDTH = 600          # 多人抽取时窗口最大宽度
+    WINDOW_MIN_SIZE = (280, 140)    # 窗口最小尺寸（等同默认）
+    WINDOW_H_PAD = 36               # 结果文字左右留白总宽
     WINDOW_MARGIN = 20
     FLOAT_OFFSET_X = 12
     FLOAT_SIZE = 40
@@ -37,6 +40,11 @@ class Config:
 
     # ── 默认学生数量 ──
     NUM_STUDENTS = 60
+
+    # ── 概率算法参数（P1-3: 三层公平性保护，硬编码不暴露给用户） ──
+    GAP_THRESHOLD = 3            # 最大-最小抽取次数差距超过此值触发平均值过滤
+    CANDIDATE_POOL_MIN_RATIO = 0.30  # 候选池不低于总人数的 30%
+    COLD_START_FLOOR_RATIO = 0.5     # 冷启动概率下限 = 平均概率 × 此值
 
     # ── 历史记录 ──
     MAX_HISTORY_RECORDS = 500

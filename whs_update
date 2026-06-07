@@ -1,6 +1,46 @@
 Check-number 更新日志
 =====================
 
+v9.3 (2026-06-14) — 算法公平性升级与多人抽取
+------------------------------------------
+🎯 新功能
+  - 多人抽取：右键菜单 → 多人抽取...（Ctrl+M），滑块选择 2–10 人，无放回抽取
+  - 连续不重复保护：同一学生不会连续两轮被抽中（除非只剩 1 人）
+  - 概率可视化：统计弹窗新增"当前概率"列；新增"查看概率分布"水平条形图面板
+  - 多人结果适配：字体按文本长度自适应缩小
+  - 动态窗口自适应：QFontMetrics 精确测宽，48→16px 迭代降字号
+  - 窗口宽度自动扩展至 600px，极端长名启用 WordWrap 换行增高
+  - 每次单人抽取后窗口自动恢复默认 280×140
+
+⚖️ 算法升级 — 三层公平性保护
+  - 平均值过滤：当最大-最小抽取次数差距 > GAP_THRESHOLD(3) 时，
+    排除 count > 平均值的候选者，仅允许低频学生进入候选池
+  - 候选池下限保障：候选池不低于总人数的 CANDIDATE_POOL_MIN_RATIO(30%)，
+    自动补回 count 最低的被排除者
+  - 冷启动参数：COLD_START_FLOOR_RATIO(0.5) 留作未来扩展
+
+🔧 代码改进
+  - StatsManager 新增 get_probability()、increment_and_update_cache()、
+    increment_batch_and_update_cache() 方法
+  - Config 新增 GAP_THRESHOLD / CANDIDATE_POOL_MIN_RATIO / COLD_START_FLOOR_RATIO 常量
+  - 新增 WINDOW_MAX_WIDTH(600) / WINDOW_MIN_SIZE / WINDOW_H_PAD 常量
+  - perform_draw / perform_multi_draw 使用缓存预热方法替代旧 invalidate 模式
+  - main_window.py 新增 _show_multi_draw_dialog()、_show_probability_panel()
+  - 新增 _reset_window_for_draw()、resizeEvent 重写，窗口缩放自动跟随
+  - animate_result 用 QFontMetrics 动态字号取代四级阶梯
+
+🐛 崩溃修复
+  - P0-1: animate_result 先 stop 旧动画 + setGraphicsEffect(None) 清除旧 Effect
+    再创建新 Effect，消除快速连续抽取时的悬空指针崩溃
+  - perform_multi_draw 开头加 self._flash = None，防止闪动状态残留
+  - _show_multi_draw_dialog 加 _flash 非空守卫，动画中重复触发被忽略
+
+🧪 测试
+  - tests/test_core.py 新增 8 个测试用例（共 21 个）
+  - 覆盖：平均值过滤触发、候选池下限、小差距不过滤、get_probability、
+    增量缓存更新、批量缓存更新、空名单、单人名单
+
+
 v9.2 (2026-06-08) — 代码坏味道重构
 ------------------------------------------
 🧹 代码清理（18 项修复，P0~P3）
@@ -71,7 +111,7 @@ v9.1 (2026-05-31) — 功能增强与架构精炼
   - 安装程序版本号更新至 v9.1
 
 📂 模块结构（12 个文件）
-  v9.1.py              — 应用入口
+  v9.1.py (→ v9.2.py 接替) — 应用入口
   config.py            — 配置、路径、偏好、QSS
   design_tokens.py     — 7 套配色方案 Token
   main_window.py       — 主窗口（UI + 事件 + 对话框）

@@ -23,17 +23,66 @@ class StatisticsManager:
     # ── 概率计算 ──
 
     def calculate_probabilities(self, students: list) -> dict:
-        """逆频次加权：被抽中越少概率越高。结果缓存于 _probabilities_cache。"""
-        if self._probabilities_cache is None:
-            probs = {
-                s: 1 / (len(students) * (self.stats.get(s, 0) + 1))
-                for s in students
-            }
-            total = sum(probs.values())
-            if total > 0:
-                probs = {k: v / total for k, v in probs.items()}
-            self._probabilities_cache = probs
+        """三层公平性保护的概率计算 (P1-3)。
+
+        步 1: 基础逆频次权重  w = 1/(N×(count+1))
+        步 2: 平均值过滤 — 当 max-min > GAP_THRESHOLD 时，
+               排除 count > 平均值的候选者
+        步 3: 候选池下限保障 — 若候选池 < N×CANDIDATE_POOL_MIN_RATIO，
+               按 count 升序补回足够学生
+        结果缓存于 _probabilities_cache。
+        """
+        if self._probabilities_cache is not None:
+            return self._probabilities_cache
+
+        N = len(students)
+        if N == 0:
+            self._probabilities_cache = {}
+            return self._probabilities_cache
+
+        counts = {s: self.stats.get(s, 0) for s in students}
+        max_count = max(counts.values())
+        min_count = min(counts.values())
+        mean_count = sum(counts.values()) / N
+
+        # 步 1: 基础逆频次权重
+        raw_weights = {s: 1.0 / (N * (counts[s] + 1)) for s in students}
+
+        # 步 2: 平均值过滤（差距超阈值时触发）
+        if max_count - min_count > Config.GAP_THRESHOLD:
+            candidates = [s for s in students if counts[s] <= mean_count]
+            # 步 3: 候选池下限保障
+            min_pool = max(2, int(N * Config.CANDIDATE_POOL_MIN_RATIO))
+            if len(candidates) < min_pool:
+                excluded = sorted(
+                    [s for s in students if counts[s] > mean_count],
+                    key=lambda s: counts[s]
+                )
+                needed = min_pool - len(candidates)
+                candidates.extend(excluded[:needed])
+        else:
+            candidates = list(students)
+
+        # 步 4: 归一化候选池概率
+        probs = {}
+        total_weight = sum(raw_weights[s] for s in candidates)
+        if total_weight > 0:
+            for s in candidates:
+                probs[s] = raw_weights[s] / total_weight
+        # 非候选学生概率为 0
+        for s in students:
+            if s not in probs:
+                probs[s] = 0.0
+
+        self._probabilities_cache = probs
         return self._probabilities_cache
+
+    def get_probability(self, student: str, students: list) -> float:
+        """获取某个学生的当前被抽中概率（0.0–1.0），不触发缓存重建 (P1-3)"""
+        if self._probabilities_cache is not None:
+            return self._probabilities_cache.get(student, 0.0)
+        self.calculate_probabilities(students)
+        return self._probabilities_cache.get(student, 0.0)
 
     def invalidate_cache(self):
         self._probabilities_cache = None
@@ -59,6 +108,21 @@ class StatisticsManager:
         self.stats[name] = self.stats.get(name, 0) + 1
         self.save_to_json()
         self.invalidate_cache()
+
+    def increment_and_update_cache(self, name: str, students: list):
+        """抽取后增量更新：计数 +1 → 立即重算概率缓存 (P1-3)"""
+        self.stats[name] = self.stats.get(name, 0) + 1
+        self.save_to_json()
+        self.invalidate_cache()
+        self.calculate_probabilities(students)  # 缓存预热
+
+    def increment_batch_and_update_cache(self, names: list, students: list):
+        """多人抽取后批量更新：所有学生计数 +1 → 立即重算概率缓存 (P1-3)"""
+        for name in names:
+            self.stats[name] = self.stats.get(name, 0) + 1
+        self.save_to_json()
+        self.invalidate_cache()
+        self.calculate_probabilities(students)  # 缓存预热
 
     def reset(self, parent=None) -> bool:
         """确认后重置统计数据。返回是否已重置。"""

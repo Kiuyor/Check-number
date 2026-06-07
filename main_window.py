@@ -9,12 +9,12 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QMenu, QMessageBox, QDialog, QTableWidget,
     QTableWidgetItem, QHeaderView, QGraphicsOpacityEffect,
-    QShortcut, QAbstractItemView, QSlider, QTextEdit,
+    QShortcut, QAbstractItemView, QSlider, QTextEdit, QScrollArea,
 )
 from PyQt5.QtCore import (
     QTimer, QPropertyAnimation, Qt, QEasingCurve,
 )
-from PyQt5.QtGui import QColor, QKeySequence
+from PyQt5.QtGui import QColor, QKeySequence, QFontMetrics
 from design_tokens import DesignTokens
 from config import Config
 from student_manager import StudentManager
@@ -45,6 +45,7 @@ class RandomSelectorWindow(QMainWindow):
 
         # ── 功能状态 ──
         self.fast_mode_enabled = False
+        self._last_drawn: str | None = None  # 上轮被抽中的学生（连续不重复保护）
 
         # ── 初始化 ──
         self.setup_ui()
@@ -276,6 +277,7 @@ class RandomSelectorWindow(QMainWindow):
         QShortcut(QKeySequence("Return"), self).activated.connect(self.start_draw_process)
         QShortcut(QKeySequence("Escape"), self).activated.connect(self.minimize_to_float)
         QShortcut(QKeySequence("Ctrl+T"), self).activated.connect(self._cycle_color_scheme)
+        QShortcut(QKeySequence("Ctrl+M"), self).activated.connect(self._show_multi_draw_dialog)
 
     # ═══════════════════════════════════════════════════════════════
     # UI 构建
@@ -339,6 +341,7 @@ class RandomSelectorWindow(QMainWindow):
     def setup_window_properties(self):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMinimumSize(*Config.WINDOW_MIN_SIZE)
         screen = QApplication.primaryScreen()
         width, height = Config.WINDOW_SIZE
         if screen:
@@ -348,7 +351,6 @@ class RandomSelectorWindow(QMainWindow):
             x = max(0, min(x, geometry.width() - 40))
             y = max(0, min(y, geometry.height() - 40))
             self.setGeometry(x, y, width, height)
-            self.setFixedSize(width, height)
         self.shadow = QFrame(self.central_widget)
         self.shadow.setGeometry(0, 0, width, height)
         self._update_shadow_style()
@@ -371,13 +373,64 @@ class RandomSelectorWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════════════
 
     def animate_result(self, selected: str):
-        """抽取结果动画（颜色渐变 + 透明度，OutCubic 缓出）"""
+        """抽取结果动画（动态字号 + 窗口自适应，OutCubic 缓出）(P1-3)
+
+        字体从 48px 起逐级降低直到文本适配可用宽度；
+        多人抽取时窗口宽度自动扩展至 600px 上限，极端情况启用 WordWrap 增高。
+        """
         t = DesignTokens.get(Config.color_scheme)
         self.result_label.setText(selected)
-        self.result_label.setFont(Config.get_font(Config.RESULT_FONT_SIZE, bold=True))
+        self.result_label.setWordWrap(False)
+
+        # ── 步 1: 迭代找到最佳字号 ──
+        max_font_size = 48
+        min_font_size = 16
+        max_text_width = Config.WINDOW_MAX_WIDTH - Config.WINDOW_H_PAD  # 564px
+        best_size = min_font_size
+
+        for size in range(max_font_size, min_font_size - 1, -1):
+            fm = QFontMetrics(Config.get_font(size, bold=True))
+            text_w = fm.horizontalAdvance(selected)
+            if text_w <= max_text_width:
+                best_size = size
+                break
+
+        fm = QFontMetrics(Config.get_font(best_size, bold=True))
+        text_width = fm.horizontalAdvance(selected)
+
+        # ── 步 2: 计算窗口尺寸 ──
+        target_w = max(Config.WINDOW_SIZE[0],
+                       min(Config.WINDOW_MAX_WIDTH, text_width + Config.WINDOW_H_PAD))
+        target_h = Config.WINDOW_SIZE[1]  # 默认 140
+
+        # 极端情况：最低 16px 仍溢出 max_width → 开启换行并增高
+        if text_width > max_text_width:
+            self.result_label.setWordWrap(True)
+            self.result_label.setFixedWidth(Config.WINDOW_MAX_WIDTH - Config.WINDOW_H_PAD)
+            # 估算所需行数
+            line_h = fm.height() + 4
+            approx_lines = (text_width // (Config.WINDOW_MAX_WIDTH - Config.WINDOW_H_PAD)) + 1
+            target_w = Config.WINDOW_MAX_WIDTH
+            target_h = max(Config.WINDOW_SIZE[1],
+                           Config.WINDOW_SIZE[1] + (approx_lines - 1) * line_h)
+        else:
+            self.result_label.setFixedWidth(target_w)  # 让 label 填满窗口
+
+        self.resize(target_w, target_h)
+
+        # ── 步 3: 应用字体 + 样式 ──
+        self.result_label.setFont(Config.get_font(best_size, bold=True))
         self.result_label.setStyleSheet(
             f"color: {t['result_gold']}; background: transparent;"
         )
+
+        # ── 步 4: 淡入动画（先停止旧动画，防止悬空指针崩溃 P0-1） ──
+        # 停止并丢弃上一轮动画
+        if self._result_animation is not None:
+            self._result_animation.stop()
+            self._result_animation = None
+        # 清除旧的 QGraphicsOpacityEffect
+        self.result_label.setGraphicsEffect(None)
 
         effect = QGraphicsOpacityEffect(self.result_label)
         self.result_label.setGraphicsEffect(effect)
@@ -417,17 +470,73 @@ class RandomSelectorWindow(QMainWindow):
 
     def perform_draw(self):
         self._flash = None
-        probabilities = self.stats_mgr.calculate_probabilities(self.students)
+        students = self.students
+
+        # 重置窗口到默认尺寸 (P1-3)
+        self._reset_window_for_draw()
+
+        # 连续不重复保护 (P1-3): 若上次有人被抽中且候选池 > 1 人，临时排除该学生
+        exclude = None
+        if self._last_drawn is not None and self._last_drawn in students and len(students) > 1:
+            exclude = self._last_drawn
+            working_students = [s for s in students if s != self._last_drawn]
+        else:
+            working_students = students
+
+        probabilities = self.stats_mgr.calculate_probabilities(working_students)
         student_list, weights = zip(*probabilities.items())
         student_list, weights = list(student_list), list(weights)
         selected = random.choices(student_list, weights=weights, k=1)[0]
-        self.stats_mgr.increment(selected)
+
+        self.stats_mgr.increment_and_update_cache(selected, working_students)
         self.history_mgr.add_record([selected])
+        self._last_drawn = selected
 
         if Config.sound_enabled:
             SoundManager.play_result()
 
         self.animate_result(selected)
+
+    def perform_multi_draw(self, count: int):
+        """无放回多人抽取 (P1-3): 一次抽取 count 人，同一轮不重复"""
+        students = list(self.students)
+        if len(students) < count:
+            self.show_toast(f"学生人数不足（需要 {count} 人，当前 {len(students)} 人）")
+            return
+
+        self._flash = None  # P0-1: 清除 flash 引用防残留状态
+
+        # 重置窗口到默认尺寸 (P1-3)
+        self._reset_window_for_draw()
+
+        selected_list = []
+        remaining = list(students)  # 本轮候选池副本
+
+        for _ in range(count):
+            if not remaining:
+                break
+            # 连续不重复保护：排除上轮被抽中者（若候选池 > 1 人）
+            working = list(remaining)
+            if self._last_drawn is not None and self._last_drawn in working and len(working) > 1:
+                working = [s for s in working if s != self._last_drawn]
+
+            probabilities = self.stats_mgr.calculate_probabilities(working)
+            name_list, weight_list = zip(*probabilities.items())
+            name_list, weight_list = list(name_list), list(weight_list)
+            picked = random.choices(name_list, weights=weight_list, k=1)[0]
+            selected_list.append(picked)
+            remaining.remove(picked)
+            self._last_drawn = picked
+
+        # 批量更新统计 + 历史
+        self.stats_mgr.increment_batch_and_update_cache(selected_list, students)
+        self.history_mgr.add_record(selected_list)
+
+        if Config.sound_enabled:
+            SoundManager.play_result()
+
+        result_text = "、".join(selected_list)
+        self.animate_result(result_text)
 
     # ═══════════════════════════════════════════════════════════════
     # Toast
@@ -497,12 +606,17 @@ class RandomSelectorWindow(QMainWindow):
         # ── 统计 ──
         stats_menu = QMenu("统计", self)
         stats_menu.addAction("查看统计信息", self.show_statistics)
+        stats_menu.addAction("查看概率分布", self._show_probability_panel)
         stats_menu.addAction("查看抽取历史", self._show_history_dialog)
         stats_menu.addAction("清除抽取历史", self._clear_history)
         stats_menu.addSeparator()
         stats_menu.addAction("重置数据", self._confirm_reset_stats)
         stats_menu.addAction("导出统计数据", self._export_stats)
         menu.addMenu(stats_menu)
+
+        # ── 多人抽取 ──
+        menu.addAction("多人抽取...", self._show_multi_draw_dialog)
+        menu.addSeparator()
 
         # ── 配色方案 ──
         scheme_items = [(name, key) for key, name in DesignTokens.list_schemes()]
@@ -591,7 +705,8 @@ class RandomSelectorWindow(QMainWindow):
 
     def _show_shortcuts(self):
         QMessageBox.information(self, "快捷键说明",
-            "Space / Enter — 抽取\n"
+            "Space / Enter — 单人抽取\n"
+            "Ctrl+M — 多人抽取\n"
             "Esc — 最小化到悬浮球\n"
             "Ctrl+T — 切换配色方案\n\n"
             "右键点击窗口可打开完整菜单")
@@ -642,6 +757,8 @@ class RandomSelectorWindow(QMainWindow):
             table.horizontalHeader().setSectionResizeMode(ci, QHeaderView.Fixed)
             if ci == 1:
                 table.setColumnWidth(ci, 100)
+            elif ci == 2:
+                table.setColumnWidth(ci, 90)
         table.verticalHeader().setVisible(False)
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -752,7 +869,7 @@ class RandomSelectorWindow(QMainWindow):
         about_box.exec_()
 
     def show_statistics(self):
-        """统计弹窗（使用对话框工厂）"""
+        """统计弹窗（使用对话框工厂） — 含概率列 (P1-3)"""
         t = DesignTokens.get(Config.color_scheme)
         stats = self.stats_mgr.stats
         total_draws = sum(stats.values())
@@ -763,10 +880,15 @@ class RandomSelectorWindow(QMainWindow):
             f"|  最高频: {top_student} ({top_count}次)"
         )
 
+        # 预热概率缓存
+        self.stats_mgr.calculate_probabilities(self.students)
+
         sorted_students = sorted(self.students, key=lambda s: stats.get(s, 0), reverse=True)
         row_data = []
         for i, student in enumerate(sorted_students):
             count = stats.get(student, 0)
+            prob = self.stats_mgr.get_probability(student, self.students)
+            prob_pct = f"{prob * 100:.1f}%"
             bg = None
             if i == 0 and count > 0:
                 bg = t['table_gold']
@@ -777,6 +899,7 @@ class RandomSelectorWindow(QMainWindow):
             row_data.append([
                 (str(student), None, bg),
                 (f"{count} 次", Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, bg),
+                (prob_pct, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, bg),
             ])
 
         actions = [
@@ -787,10 +910,122 @@ class RandomSelectorWindow(QMainWindow):
         ]
 
         dlg = self._build_table_dialog(
-            "抽取统计", ["学生", "抽取次数"], row_data,
+            "抽取统计", ["学生", "抽取次数", "当前概率"], row_data,
             summary, actions, Config.STATS_DIALOG_OFFSET,
-            width=380, height=440
+            width=460, height=440
         )
+        dlg.exec_()
+
+    def _show_probability_panel(self):
+        """概率分布面板：水平条形图展示所有学生的当前被抽中概率 (P1-3)"""
+        t = DesignTokens.get(Config.color_scheme)
+
+        # 预热概率缓存
+        self.stats_mgr.calculate_probabilities(self.students)
+
+        # 按概率降序排列
+        probs = [(s, self.stats_mgr.get_probability(s, self.students))
+                 for s in self.students]
+        probs.sort(key=lambda x: x[1], reverse=True)
+
+        if not probs:
+            self.show_toast("暂无学生数据")
+            return
+
+        max_prob = max(p[1] for p in probs) if probs else 0.01
+        N = len(probs)
+        dlg_height = min(560, 80 + N * 28)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("概率分布（当前被抽中概率）")
+        dlg.resize(480, dlg_height)
+        dlg.setMinimumHeight(200)
+        dlg.setStyleSheet(f"QDialog {{ background: {t['surface_solid']}; }}")
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(4)
+
+        # 标题行
+        header = QLabel(f"共 {N} 名学生 — 概率降序排列")
+        header.setFont(Config.get_font(12, bold=True))
+        header.setStyleSheet(f"color: {t['text_primary']}; background: transparent; padding: 4px 0;")
+        layout.addWidget(header)
+
+        # 条形图容器（可滚动）
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: transparent; }}")
+
+        bar_widget = QWidget()
+        bar_layout = QVBoxLayout(bar_widget)
+        bar_layout.setContentsMargins(0, 0, 0, 0)
+        bar_layout.setSpacing(2)
+
+        bar_max_width = 380  # 条形图最大像素宽度
+        for student, prob in probs:
+            pct = prob * 100
+            bar_width = int(bar_max_width * prob / max_prob) if max_prob > 0 else 0
+
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 2, 0, 2)
+            row_layout.setSpacing(6)
+
+            # 名字标签（固定宽度）
+            name_label = QLabel(student)
+            name_label.setFixedWidth(80)
+            name_label.setFont(Config.get_font(11))
+            name_label.setStyleSheet(f"color: {t['text_primary']}; background: transparent;")
+            row_layout.addWidget(name_label)
+
+            # 条形图
+            bar = QLabel()
+            bar.setFixedSize(max(4, bar_width), 18)
+            # 颜色梯度：高概率绿色 → 低概率红色
+            if pct >= 20:
+                bar_color = "#10B981"  # 绿
+            elif pct >= 10:
+                bar_color = "#F59E0B"  # 黄
+            elif pct >= 5:
+                bar_color = "#F97316"  # 橙
+            else:
+                bar_color = "#EF4444"  # 红
+            bar.setStyleSheet(
+                f"background: {bar_color}; border-radius: 4px;"
+            )
+            row_layout.addWidget(bar)
+            row_layout.addStretch()
+
+            # 百分比标签
+            pct_label = QLabel(f"{pct:.1f}%")
+            pct_label.setFixedWidth(50)
+            pct_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            pct_label.setFont(Config.get_font(10))
+            pct_label.setStyleSheet(f"color: {t['text_secondary']}; background: transparent;")
+            row_layout.addWidget(pct_label)
+
+            bar_layout.addWidget(row)
+
+        bar_layout.addStretch()
+        scroll.setWidget(bar_widget)
+        layout.addWidget(scroll)
+
+        # 关闭按钮
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        close_btn = QPushButton("关闭")
+        close_btn.setFixedSize(80, 32)
+        close_btn.clicked.connect(dlg.accept)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{ background: {t['primary']}; color: {t['on_primary']};
+            border: none; border-radius: 8px; font-size: 14px; }}
+            QPushButton:hover {{ opacity: 0.85; }}
+        """)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+        dlg.move(self.x() + (self.width() - 480) // 2,
+                 self.y() + (self.height() - dlg_height) // 2)
         dlg.exec_()
 
     # ═══════════════════════════════════════════════════════════════
@@ -836,6 +1071,112 @@ class RandomSelectorWindow(QMainWindow):
         self.fast_mode_enabled = not self.fast_mode_enabled
         self._update_fast_btn_style()
         self.show_toast("快速模式已开启" if self.fast_mode_enabled else "快速模式已关闭")
+
+    def _show_multi_draw_dialog(self):
+        """多人抽取弹窗：滑块选择 2~10 人 → 调用 perform_multi_draw (P1-3)"""
+        # P0-1: 防止动画进行中再次触发多人抽取
+        if self._flash is not None:
+            return
+
+        max_count = min(10, len(self.students))
+        if max_count < 2:
+            self.show_toast("学生人数不足，无法多人抽取")
+            return
+
+        t = DesignTokens.get(Config.color_scheme)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("多人抽取")
+        dlg.setFixedSize(320, 160)
+        dlg.setStyleSheet(f"QDialog {{ background: {t['surface_solid']}; border-radius: 12px; }}")
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        title_label = QLabel(f"选择抽取人数（2–{max_count}）")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setFont(Config.get_font(14))
+        title_label.setStyleSheet(f"color: {t['text_primary']}; background: transparent;")
+        layout.addWidget(title_label)
+
+        count_label = QLabel("2")
+        count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        count_label.setFont(Config.get_font(28, bold=True))
+        count_label.setStyleSheet(f"color: {t['primary']}; background: transparent;")
+        layout.addWidget(count_label)
+
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(2, max_count)
+        slider.setValue(2)
+        slider.setTickPosition(QSlider.TicksBelow)
+        slider.setTickInterval(1)
+        slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                background: {t['btn_min_bg']};
+                height: 6px;
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {t['primary']};
+                width: 16px;
+                height: 16px;
+                margin: -6px 0;
+                border-radius: 8px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {t['primary']};
+                border-radius: 3px;
+            }}
+        """)
+        slider.valueChanged.connect(lambda v: count_label.setText(str(v)))
+        layout.addWidget(slider)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
+        bw, bh = Config.DIALOG_BTN_SIZE
+
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setFixedSize(bw, bh)
+        cancel_btn.clicked.connect(dlg.reject)
+        cancel_btn.setStyleSheet(f"""
+            QPushButton {{ background: {t['btn_min_bg']}; color: {t['text_primary']};
+            border: none; border-radius: 8px; font-size: 14px; }}
+            QPushButton:hover {{ opacity: 0.85; }}
+        """)
+
+        def _do_multi():
+            dlg.accept()
+            count = slider.value()
+            self.status_label.setText(f"抽取 {count} 人中...")
+            if self.fast_mode_enabled:
+                self.perform_multi_draw(count)
+            else:
+                self._flash = FlashAnimation(
+                    self.students,
+                    on_name=self.result_label.setText,
+                    on_finish=lambda: self.perform_multi_draw(count),
+                    on_tick=(lambda: SoundManager.play_flash_tick()) if Config.sound_enabled else None,
+                )
+                self._flash.start()
+
+        ok_btn = QPushButton("开始抽取")
+        ok_btn.setFixedSize(110, bh)
+        ok_btn.clicked.connect(_do_multi)
+        ok_btn.setStyleSheet(f"""
+            QPushButton {{ background: {t['primary']}; color: {t['on_primary']};
+            border: none; border-radius: 8px; font-size: 14px; }}
+            QPushButton:hover {{ opacity: 0.85; }}
+        """)
+
+        btn_layout.addStretch()
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(ok_btn)
+        layout.addLayout(btn_layout)
+
+        dlg.move(self.x() + (self.width() - 320) // 2,
+                 self.y() + (self.height() - 160) // 2)
+        dlg.exec_()
 
     def _update_fast_btn_style(self):
         """更新快速模式按钮样式 (P2-4: 使用 DesignTokens success 颜色)"""
@@ -889,6 +1230,19 @@ class RandomSelectorWindow(QMainWindow):
             self.start_draw_process()
             event.accept()
         super().mouseDoubleClickEvent(event)
+
+    def resizeEvent(self, event):
+        """窗口尺寸变化时同步 shadow 背景和悬浮元素位置 (P1-3)"""
+        super().resizeEvent(event)
+        w, h = self.width(), self.height()
+        self.shadow.setGeometry(0, 0, w, h)
+        self._position_overlays()
+
+    def _reset_window_for_draw(self):
+        """每次抽取前恢复窗口默认尺寸和 label 状态 (P1-3)"""
+        self.result_label.setWordWrap(False)
+        self.result_label.setFixedWidth(Config.WINDOW_MAX_WIDTH)  # 恢复弹性宽度
+        self.resize(*Config.WINDOW_SIZE)
 
     # ── 最小化到悬浮球 ──
 
