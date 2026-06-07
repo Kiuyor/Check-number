@@ -1,5 +1,5 @@
 ; ============================================================
-; CheckNumber v9.1 - NSIS Installer Script
+; CheckNumber v9.2 - NSIS Installer Script
 ; ============================================================
 
 Unicode true
@@ -13,7 +13,7 @@ OutFile "CheckNumber-Setup.exe"
 InstallDir "$PROGRAMFILES\CheckNumber"
 RequestExecutionLevel admin
 
-VIProductVersion "9.1.0.0"
+VIProductVersion "9.2.0.0"
 VIAddVersionKey "ProductName" "CheckNumber"
 VIAddVersionKey "CompanyName" "Soup_007"
 VIAddVersionKey "FileDescription" "Random Name Picker Setup"
@@ -43,16 +43,16 @@ Var StartMenuFolder
 ; -------------------- Install --------------------
 Section "Install"
     SetOutPath "$INSTDIR"
-    File /r "build\v9.1.dist\*"
+    File /r "build\v9.2.dist\*"
     WriteUninstaller "$INSTDIR\uninstall.exe"
 
     ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
     IntFmt $0 "0x%08X" $0
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayName" "CheckNumber v9.1"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayName" "CheckNumber v9.2"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "UninstallString" '"$INSTDIR\uninstall.exe"'
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayIcon" '"$INSTDIR\CheckNumber.exe"'
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "Publisher" "Soup_007"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayVersion" "9.1"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "DisplayVersion" "9.2"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "EstimatedSize" "$0"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CheckNumber" "NoRepair" 1

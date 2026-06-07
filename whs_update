@@ -1,6 +1,37 @@
 Check-number 更新日志
 =====================
 
+v9.2 (2026-06-08) — 代码坏味道重构
+------------------------------------------
+🧹 代码清理（18 项修复，P0~P3）
+
+  P0 安全/可靠性：
+  - ensure_initialized 新增 invalidate_cache() 调用，修复名单变更后概率缓存未失效的 bug
+  - Config.write_json 改为 tmp+replace+fsync 原子写入模式，避免写入中断残损文件
+
+  P1 架构/设计：
+  - 新增 StatisticsManager.increment() 封装抽取计数，消除 perform_draw 对 stats 字典的直接操作
+  - 提取 StudentManager._encrypt_write() 静态方法，消除 _save_names_to_enc/import_student_list 中的加密写入重复
+  - 提取 _build_checkable_menu() 子菜单工厂，contextMenuEvent 从 90→55 行
+  - 消除 self.sound_enabled 影子变量，统一使用 Config.sound_enabled
+
+  P2 可维护性：
+  - 新增 tests/test_core.py，含 13 个单元测试覆盖 XOR 加解密、色彩工具、概率计算、缓存管理、JSON 持久化
+  - design_tokens 数据驱动重构：7 套方案从 77 行重复 dict 压缩为 7 行元组 + 自动派生
+  - prepare_students_file 拆分为 _upgrade_plaintext / _load_or_generate 三步
+  - float_ball 魔法数字 5 提取为 _CLICK_THRESHOLD 类常量
+  - _setup_dpi 移除 ~25 行 Qt <5.14 兼容代码
+
+  P3 代码清理：
+  - splash_screen 魔法尺寸提取为类常量，移除未使用 QFont 导入
+  - Config 类变量文档加固
+
+📦 分发
+  - 入口文件更新为 v9.2.py
+  - Nuitka standalone + NSIS 安装包构建
+  - GitHub Release v9.2 发布
+
+
 v9.1 (2026-05-31) — 功能增强与架构精炼
 ------------------------------------------
 🎯 新功能

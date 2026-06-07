@@ -6,7 +6,7 @@
 
 ```bash
 pip install PyQt5
-python v9.1.py
+python v9.2.py
 ```
 
 ## 功能一览
@@ -52,7 +52,7 @@ python v9.1.py
 ## 项目结构
 
 ```
-├── v9.1.py              # 应用入口（DPI 适配 → 启动画面 → 主窗口）
+├── v9.2.py              # 应用入口（DPI 适配 → 启动画面 → 主窗口）
 ├── config.py            # 常量、路径管理、偏好 JSON 读写、QSS 样式生成
 ├── design_tokens.py     # 7 套配色方案的 Token 定义（三层合并策略）
 ├── main_window.py       # 主窗口：UI、事件、动画、右键菜单、对话框
@@ -101,7 +101,7 @@ python v9.1.py
 ```bash
 # Nuitka 编译
 pip install nuitka
-python -m nuitka --standalone --enable-plugin=pyqt5 --windows-console-mode=disable --output-dir=build --output-filename=CheckNumber.exe --include-data-files=whs_update=whs_update --assume-yes-for-downloads v9.1.py
+python -m nuitka --standalone --enable-plugin=pyqt5 --windows-console-mode=disable --output-dir=build --output-filename=CheckNumber.exe --include-data-files=whs_update=whs_update --assume-yes-for-downloads v9.2.py
 
 # 或使用一键脚本
 .\build.ps1              # Nuitka + NSIS 完整构建

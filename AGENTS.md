@@ -5,7 +5,7 @@
 ## Project
 
 - **语言/框架**: Python 3 + PyQt5
-- **入口**: `v9.1.py` (`pip install PyQt5` → `python v9.1.py`)
+- **入口**: `v9.2.py` (`pip install PyQt5` → `python v9.2.py`)
 - **依赖**: 仅 PyQt5（零额外依赖）
 - **数据目录**: `%USERPROFILE%\Documents\check number\`（名单加密存储、统计 JSON、历史 JSON、偏好 JSON）
 
@@ -14,7 +14,7 @@
 | 命令 | 说明 |
 |------|------|
 | `pip install PyQt5` | 安装依赖 |
-| `python v9.1.py` | 运行应用 |
+| `python v9.2.py` | 运行应用 |
 | `.\build.ps1` | 完整构建（Nuitka 编译 + NSIS 安装包） |
 | `.\build.ps1 -SkipNuitka` | 仅重新打包 NSIS |
 | `.\build.ps1 -SkipInstaller` | 仅 Nuitka 编译 |
@@ -29,7 +29,7 @@
 
 | 模块 | 职责 |
 |------|------|
-| `v9.1.py` | 入口：DPI 适配 → QApplication → 启动画面 → 主窗口 |
+| `v9.2.py` | 入口：DPI 适配 → QApplication → 启动画面 → 主窗口 |
 | `config.py` | `Config` 类：常量和路径管理、偏好 JSON 读写、QSS 样式生成、共享 JSON 工具 |
 | `design_tokens.py` | `DesignTokens` 类：7 套配色方案的 Token 定义与构建（三层合并策略） |
 | `main_window.py` | `RandomSelectorWindow` (QMainWindow)：主窗口 UI、事件、动画、右键菜单、对话框 |
@@ -44,7 +44,7 @@
 ### 数据流
 
 ```
-v9.1.py (入口)
+v9.2.py (入口)
   → Config.load_preferences() 加载 config.json
   → SplashScreen 启动画面
   → RandomSelectorWindow

@@ -709,7 +709,7 @@ class RandomSelectorWindow(QMainWindow):
     def show_about_dialog(self):
         about_box = QMessageBox(self)
         about_box.setWindowTitle("关于软件")
-        about_box.setText("Check-number v9.0\n\n"
+        about_box.setText("Check-number v9.2\n\n"
                           "作者：Soup_007\n如有建议请联系开发者\n"
                           "Mail:750173212@qq.com\n© 2023-2025\n\n"
                           "设计系统：Impeccable × UI UX Pro Max（浅色模式）")
